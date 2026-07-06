@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
-      max_tokens: 4096,
+      max_tokens: 16000,
       messages: [
         {
           role: "user",
@@ -43,7 +43,9 @@ export async function POST(req: NextRequest) {
       throw new Error("Unexpected response type from Claude");
     }
 
-    const analysis = JSON.parse(content.text);
+    // Claude sometimes wraps JSON in markdown code fences — strip them
+    const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+    const analysis = JSON.parse(raw);
     return NextResponse.json(analysis);
   } catch (err) {
     console.error("Analysis error:", err);

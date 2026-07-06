@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { DEMO_BILL } from "@/lib/demoData";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
@@ -36,9 +37,15 @@ export default function Home() {
     }
   };
 
+  const handleDemo = () => {
+    sessionStorage.setItem("billAnalysis", JSON.stringify(DEMO_BILL));
+    router.push("/results");
+  };
+
   return (
     <main className="min-h-screen bg-gray-50 flex flex-col items-center justify-center px-4">
       <div className="max-w-lg w-full">
+
         {/* Header */}
         <div className="text-center mb-10">
           <h1 className="text-4xl font-bold text-gray-900 mb-3">
@@ -69,9 +76,7 @@ export default function Home() {
                     <p className="text-sm text-gray-500 mt-1">
                       {(file.size / 1024 / 1024).toFixed(2)} MB
                     </p>
-                    <p className="text-sm text-blue-600 mt-2">
-                      Click to change file
-                    </p>
+                    <p className="text-sm text-blue-600 mt-2">Click to change file</p>
                   </div>
                 ) : (
                   <div>
@@ -105,6 +110,24 @@ export default function Home() {
               {loading ? "Analyzing your bill…" : "Analyze My Bill"}
             </button>
           </form>
+
+          {/* Divider */}
+          <div className="flex items-center gap-3 my-5">
+            <div className="flex-1 h-px bg-gray-100" />
+            <span className="text-xs text-gray-400">or</span>
+            <div className="flex-1 h-px bg-gray-100" />
+          </div>
+
+          {/* Demo Button */}
+          <button
+            onClick={handleDemo}
+            className="w-full py-3 px-6 rounded-xl font-semibold text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors flex items-center justify-center gap-2"
+          >
+            <span>👀</span> See a Demo Bill
+          </button>
+          <p className="text-center text-xs text-gray-400 mt-2">
+            No upload needed — explore with a realistic sample ER bill
+          </p>
         </div>
 
         {/* Trust Note */}

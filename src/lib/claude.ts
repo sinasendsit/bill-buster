@@ -42,4 +42,4 @@ Flag rules:
 
 Be precise, be plain, and err on the side of flagging anything suspicious. Patients deserve to understand every line.
 
-Return ONLY the JSON object, no additional text.`;
+Return ONLY the raw JSON object. No markdown, no code fences, no explanation — just the JSON.`;
