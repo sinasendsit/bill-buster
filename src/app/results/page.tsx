@@ -12,10 +12,24 @@ const FLAG_COLORS: Record<Flag["severity"], string> = {
 
 const FLAG_ICONS: Record<Flag["type"], string> = {
   duplicate: "🔁",
+  unbundling: "🧩",
   severity_mismatch: "⚠️",
   unrelated: "❓",
   price_outlier: "💸",
   info: "ℹ️",
+};
+
+const money = (n: number) =>
+  n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+const DOC_TYPE_LABELS: Record<string, string> = {
+  itemized_statement: "Itemized Hospital Statement",
+  ub04_claim: "UB-04 Facility Claim",
+  cms1500_claim: "CMS-1500 Professional Claim",
+  eob: "Explanation of Benefits (not a bill)",
+  msn: "Medicare Summary Notice (not a bill)",
+  summary_bill: "Summary Bill",
+  other: "Billing Document",
 };
 
 export default function ResultsPage() {
@@ -50,9 +64,22 @@ export default function ResultsPage() {
           </button>
         </div>
 
+        {/* Coverage warning */}
+        {analysis.coverageWarning && (
+          <div className="bg-amber-50 border border-amber-300 rounded-2xl p-4 flex gap-3 text-amber-900 text-sm">
+            <span className="shrink-0">📄</span>
+            <span>{analysis.coverageWarning}</span>
+          </div>
+        )}
+
         {/* Summary Card */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
           <div className="flex flex-wrap gap-4 text-sm text-gray-500">
+            {analysis.documentType && (
+              <span className="bg-blue-50 text-blue-700 border border-blue-200 rounded-full px-3 py-0.5 text-xs font-medium">
+                {DOC_TYPE_LABELS[analysis.documentType] ?? DOC_TYPE_LABELS.other}
+              </span>
+            )}
             {analysis.facilityName && <span>🏥 {analysis.facilityName}</span>}
             {analysis.serviceDate && <span>📅 {analysis.serviceDate}</span>}
             {analysis.patientName && <span>👤 {analysis.patientName}</span>}
@@ -60,16 +87,20 @@ export default function ResultsPage() {
 
           <div className="flex gap-6">
             <div>
-              <p className="text-xs text-gray-400 uppercase tracking-wide">Total Charged</p>
+              <p className="text-xs text-gray-400 uppercase tracking-wide">
+                {analysis.documentType === "eob" || analysis.documentType === "msn"
+                  ? "You May Owe"
+                  : "Total Charged"}
+              </p>
               <p className="text-3xl font-bold text-gray-900">
-                ${analysis.totalCharged.toLocaleString()}
+                ${money(analysis.totalCharged)}
               </p>
             </div>
             {totalSuspect > 0 && (
               <div>
                 <p className="text-xs text-gray-400 uppercase tracking-wide">Flagged Amount</p>
                 <p className="text-3xl font-bold text-red-600">
-                  ${totalSuspect.toLocaleString()}
+                  ${money(totalSuspect)}
                 </p>
               </div>
             )}
@@ -120,11 +151,11 @@ export default function ResultsPage() {
                 </div>
                 <div className="text-right shrink-0">
                   <p className="font-bold text-gray-900">
-                    ${item.chargedAmount.toLocaleString()}
+                    ${money(item.chargedAmount)}
                   </p>
                   {item.medicareRate && (
                     <p className="text-xs text-gray-400">
-                      Medicare: ~${item.medicareRate.toLocaleString()}
+                      Medicare: ~${money(item.medicareRate)}
                     </p>
                   )}
                 </div>
