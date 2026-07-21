@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, BILL_ANALYSIS_PROMPT } from "@/lib/claude";
+import { groundLineItem } from "@/lib/codeDatabase";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
@@ -64,6 +65,13 @@ export async function POST(req: NextRequest) {
     // Claude sometimes wraps JSON in markdown code fences — strip them
     const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
     const analysis = JSON.parse(raw);
+
+    // Deterministic grounding: Claude decodes each code into plain English, but the
+    // authoritative facts (does the code exist, its category, and the real Medicare
+    // benchmark) come from our reference DB — so dollar comparisons aren't guesses.
+    if (Array.isArray(analysis.lineItems)) {
+      for (const item of analysis.lineItems) groundLineItem(item);
+    }
 
     // Cross-check the printed grand total against the sum of the line items —
     // but never silently overwrite the headline with a sum we can't trust. On a

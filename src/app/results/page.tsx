@@ -147,6 +147,14 @@ export default function ResultsPage() {
                   <span className="text-xs font-mono bg-gray-100 text-gray-600 px-2 py-0.5 rounded">
                     {item.codeType}: {item.code}
                   </span>
+                  {item.codeVerified && (
+                    <span
+                      className="ml-1 text-[10px] text-green-700 bg-green-50 border border-green-200 px-1.5 py-0.5 rounded-full align-middle"
+                      title={item.codeCategory ? `Recognized code · ${item.codeCategory}` : "Recognized code"}
+                    >
+                      ✓ recognized
+                    </span>
+                  )}
                   <p className="font-medium text-gray-900 mt-1">{item.description}</p>
                 </div>
                 <div className="text-right shrink-0">
@@ -156,6 +164,11 @@ export default function ResultsPage() {
                   {item.medicareRate && (
                     <p className="text-xs text-gray-400">
                       Medicare: ~${money(item.medicareRate)}
+                      {item.rateSource === "benchmark" ? (
+                        <span className="text-green-600"> · verified</span>
+                      ) : item.rateSource === "estimated" ? (
+                        <span className="text-gray-400"> · est.</span>
+                      ) : null}
                     </p>
                   )}
                 </div>

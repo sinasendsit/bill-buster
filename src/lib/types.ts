@@ -4,6 +4,9 @@ export interface LineItem {
   description: string;       // plain English translation
   chargedAmount: number;
   medicareRate?: number;      // benchmark for comparison
+  codeVerified?: boolean;     // code recognized in BillBuster's reference DB
+  codeCategory?: string;      // authoritative category from the reference DB
+  rateSource?: "benchmark" | "estimated"; // where medicareRate came from
   flags: Flag[];
 }
 
