@@ -46,6 +46,14 @@ If the document is an EOB or MSN: it is NOT a bill. Say so in the summary, extra
 
 Approximate Medicare rates to use when you recognize the code: 36415 blood draw ~$3, 36600 arterial puncture ~$25, 80048 BMP ~$11, 80053 CMP ~$15, 85025 CBC ~$11, 82805 blood gas ~$30, 71045 chest X-ray 1 view ~$30, 93005 EKG tracing ~$9, 94640 nebulizer treatment ~$12, 94668 chest physio ~$18, 99283/99284/99285 ER visit ~$65/$125/$185.
 
+## Step 5 — Insurance status, bill date, and the estimate
+
+These three facts drive the patient's legal rights, so report them literally and do not guess:
+
+- "selfPay": true when the document shows the patient paid WITHOUT insurance — a "Self-Pay Discount" or "Uninsured Discount" line, a Guarantor with no insurance payer, the words "self-pay"/"uninsured"/"cash price", or no payer/insurance section at all. false when an insurance payer, plan name, or "Insurance Covered"/"Plan Paid"/"Insurance Payment" amounts appear. null only if genuinely unclear.
+- "billDate": the statement or bill date printed on the document (NOT the date of service). null if absent.
+- "estimateTotal": if a SECOND document is attached, it is the patient's GOOD FAITH ESTIMATE — a written cost estimate given before treatment. Extract its total estimated amount here. If only one document was provided, set this to null. Never infer an estimate from the bill itself.
+
 ## Output
 
 Return a JSON object matching this exact structure:
@@ -56,6 +64,9 @@ Return a JSON object matching this exact structure:
   "serviceDate": "string or null",
   "documentType": "itemized_statement" | "ub04_claim" | "cms1500_claim" | "eob" | "msn" | "summary_bill" | "other",
   "coverageWarning": "string or null — plain-English note when the analysis is partial (missing pages, unreadable regions, totals that don't reconcile)",
+  "selfPay": true | false | null,
+  "billDate": "string or null — the statement date printed on the bill",
+  "estimateTotal": number or null,
   "totalCharged": number,
   "lineItems": [
     {

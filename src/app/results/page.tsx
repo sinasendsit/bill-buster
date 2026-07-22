@@ -72,6 +72,100 @@ export default function ResultsPage() {
           </div>
         )}
 
+        {/* No Surprises Act — your legal rights */}
+        {analysis.noSurprises && (
+          <div
+            className={`rounded-2xl border-2 p-6 space-y-4 ${
+              analysis.noSurprises.status === "eligible"
+                ? "bg-emerald-50 border-emerald-400"
+                : analysis.noSurprises.status === "need_estimate"
+                ? "bg-amber-50 border-amber-300"
+                : "bg-blue-50 border-blue-200"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <span className="text-2xl shrink-0">
+                {analysis.noSurprises.status === "eligible" ? "⚖️" : "🛡️"}
+              </span>
+              <div>
+                <h2 className="font-bold text-gray-900 text-lg leading-snug">
+                  {analysis.noSurprises.headline}
+                </h2>
+                <p className="text-sm text-gray-700 mt-2 leading-relaxed">
+                  {analysis.noSurprises.detail}
+                </p>
+              </div>
+            </div>
+
+            {analysis.noSurprises.status === "eligible" &&
+              analysis.noSurprises.estimateTotal !== undefined && (
+                <div className="flex flex-wrap gap-6 bg-white/70 rounded-xl px-4 py-3">
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Your estimate</p>
+                    <p className="font-bold text-gray-900">
+                      ${money(analysis.noSurprises.estimateTotal)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Billed</p>
+                    <p className="font-bold text-gray-900">
+                      ${money(analysis.noSurprises.billedTotal ?? 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500 uppercase tracking-wide">Over estimate</p>
+                    <p className="font-bold text-emerald-700">
+                      ${money(analysis.noSurprises.overage ?? 0)}
+                    </p>
+                  </div>
+                </div>
+              )}
+
+            <div>
+              <p className="text-xs font-semibold text-gray-600 uppercase tracking-wide mb-2">
+                What to do
+              </p>
+              <ol className="space-y-1.5">
+                {analysis.noSurprises.steps.map((s, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-gray-800">
+                    <span className="font-bold shrink-0">{i + 1}.</span>
+                    <span>{s}</span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+
+            <details className="group">
+              <summary className="cursor-pointer text-sm font-medium text-gray-700 hover:text-gray-900">
+                Your protections →
+              </summary>
+              <ul className="mt-2 space-y-1.5">
+                {analysis.noSurprises.protections.map((p, i) => (
+                  <li key={i} className="flex gap-2 text-sm text-gray-700">
+                    <span className="shrink-0">✓</span>
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </details>
+
+            <a
+              href={analysis.noSurprises.actionUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={`inline-block px-5 py-2.5 rounded-xl font-semibold text-white text-sm ${
+                analysis.noSurprises.status === "eligible"
+                  ? "bg-emerald-600 hover:bg-emerald-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+            >
+              {analysis.noSurprises.status === "eligible"
+                ? "Start your dispute at CMS →"
+                : "Learn your rights at CMS →"}
+            </a>
+          </div>
+        )}
+
         {/* Summary Card */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6 space-y-4">
           <div className="flex flex-wrap gap-4 text-sm text-gray-500">

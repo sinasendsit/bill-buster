@@ -2,9 +2,23 @@ import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, BILL_ANALYSIS_PROMPT } from "@/lib/claude";
 import { groundLineItem } from "@/lib/codeDatabase";
+import { assessNoSurprises } from "@/lib/noSurprises";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
+
+/** Turn an uploaded PDF/image into a Claude content block, or null if unsupported. */
+async function toContentBlock(f: File): Promise<Anthropic.ContentBlockParam | null> {
+  const mimeType = f.type;
+  const isPdf = mimeType === "application/pdf";
+  const isImage = (IMAGE_TYPES as readonly string[]).includes(mimeType);
+  if (!isPdf && !isImage) return null;
+
+  const base64 = Buffer.from(await f.arrayBuffer()).toString("base64");
+  return isPdf
+    ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64 } }
+    : { type: "image", source: { type: "base64", media_type: mimeType as ImageType, data: base64 } };
+}
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,46 +29,35 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    const mimeType = file.type;
-    const isPdf = mimeType === "application/pdf";
-    const isImage = (IMAGE_TYPES as readonly string[]).includes(mimeType);
-
-    if (!isPdf && !isImage) {
+    const fileBlock = await toContentBlock(file);
+    if (!fileBlock) {
       return NextResponse.json(
         { error: "Unsupported file type. Upload a PDF or an image (JPEG, PNG, WebP, GIF)." },
         { status: 400 }
       );
     }
 
-    const bytes = await file.arrayBuffer();
-    const base64 = Buffer.from(bytes).toString("base64");
+    // Optional second upload: the patient's good faith estimate. Comparing the bill
+    // against it is what unlocks the federal dispute right, so it goes to Claude as a
+    // clearly-labeled second document.
+    const estimateFile = formData.get("estimate") as File | null;
+    const estimateBlock =
+      estimateFile && estimateFile.size > 0 ? await toContentBlock(estimateFile) : null;
 
-    // PDFs go to Claude as a document block; images as an image block.
-    const fileBlock: Anthropic.ContentBlockParam = isPdf
-      ? {
-          type: "document",
-          source: { type: "base64", media_type: "application/pdf", data: base64 },
-        }
-      : {
-          type: "image",
-          source: { type: "base64", media_type: mimeType as ImageType, data: base64 },
-        };
+    const promptContent: Anthropic.ContentBlockParam[] = [fileBlock];
+    if (estimateBlock) {
+      promptContent.push({
+        type: "text",
+        text: "The NEXT document is the patient's GOOD FAITH ESTIMATE — the written cost estimate they were given before treatment. It is not a bill. Extract its total as estimateTotal.",
+      });
+      promptContent.push(estimateBlock);
+    }
+    promptContent.push({ type: "text", text: BILL_ANALYSIS_PROMPT });
 
     const response = await anthropic.messages.create({
       model: "claude-opus-4-8",
       max_tokens: 16000,
-      messages: [
-        {
-          role: "user",
-          content: [
-            fileBlock,
-            {
-              type: "text",
-              text: BILL_ANALYSIS_PROMPT,
-            },
-          ],
-        },
-      ],
+      messages: [{ role: "user", content: promptContent }],
     });
 
     const content = response.content[0];
@@ -117,6 +120,16 @@ export async function POST(req: NextRequest) {
         }
       }
     }
+
+    // No Surprises Act: Claude reports the raw facts, but eligibility for the federal
+    // dispute process is decided here in code — never by the model. Runs last so it
+    // uses the final reconciled total.
+    analysis.noSurprises = assessNoSurprises({
+      selfPay: analysis.selfPay,
+      billedTotal: analysis.totalCharged,
+      estimateTotal: analysis.estimateTotal,
+      documentType: analysis.documentType,
+    });
 
     return NextResponse.json(analysis);
   } catch (err) {

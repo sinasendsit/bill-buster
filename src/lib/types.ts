@@ -1,3 +1,5 @@
+import type { NoSurprisesInfo } from "./noSurprises";
+
 export interface LineItem {
   code: string;
   codeType: "CPT" | "ICD" | "Revenue" | "Other";
@@ -31,6 +33,10 @@ export interface BillAnalysis {
   serviceDate?: string;
   documentType?: DocumentType;
   coverageWarning?: string;   // set when the analysis is partial (missing pages etc.)
+  selfPay?: boolean | null;   // paid without insurance (unlocks the federal dispute)
+  billDate?: string;          // statement date, distinct from the service date
+  estimateTotal?: number | null; // total from an uploaded good faith estimate
+  noSurprises?: NoSurprisesInfo | null; // computed in code, never by the model
   totalCharged: number;
   lineItems: LineItem[];
   summary: string;            // 2-3 sentence plain English summary

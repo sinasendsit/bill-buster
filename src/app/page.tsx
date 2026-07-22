@@ -6,6 +6,7 @@ import { DEMO_BILL } from "@/lib/demoData";
 
 export default function Home() {
   const [file, setFile] = useState<File | null>(null);
+  const [estimate, setEstimate] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -19,6 +20,7 @@ export default function Home() {
 
     const formData = new FormData();
     formData.append("file", file);
+    if (estimate) formData.append("estimate", estimate);
 
     try {
       const res = await fetch("/api/analyze", {
@@ -95,6 +97,57 @@ export default function Home() {
                 accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
                 className="hidden"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+
+            {/* Optional: good faith estimate — unlocks the federal dispute check */}
+            <label className="block cursor-pointer">
+              <div
+                className={`border rounded-xl px-4 py-3 flex items-center gap-3 transition-colors ${
+                  estimate
+                    ? "border-emerald-300 bg-emerald-50"
+                    : "border-gray-200 hover:border-gray-300 bg-gray-50"
+                }`}
+              >
+                <span className="text-xl shrink-0">{estimate ? "✅" : "➕"}</span>
+                <div className="min-w-0 flex-1">
+                  {estimate ? (
+                    <>
+                      <p className="text-sm font-medium text-gray-900 truncate">{estimate.name}</p>
+                      <p className="text-xs text-emerald-700">
+                        Estimate added — we&apos;ll check if you can dispute this bill
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-gray-700">
+                        Got a cost estimate? Add it <span className="text-gray-400">(optional)</span>
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        If your bill came in $400+ over a written estimate, you may be able to
+                        force a federal review
+                      </p>
+                    </>
+                  )}
+                </div>
+                {estimate && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      setEstimate(null);
+                    }}
+                    className="text-xs text-gray-400 hover:text-gray-600 shrink-0"
+                  >
+                    Remove
+                  </button>
+                )}
+              </div>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,image/gif,application/pdf"
+                className="hidden"
+                onChange={(e) => setEstimate(e.target.files?.[0] ?? null)}
               />
             </label>
 
