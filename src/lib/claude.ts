@@ -27,6 +27,7 @@ If the document is an EOB or MSN: it is NOT a bill. Say so in the summary, extra
 - ICD-10 diagnosis codes may have decimals stripped (J9601 = J96.01 — decimal goes after the 3rd character). Diagnosis codes never carry dollar amounts; codes on charge lines are CPT/HCPCS.
 - Common abbreviations: TX=treatment, SUBQ/SUBSQ=subsequent (NOT subcutaneous on respiratory lines), NEB=nebulizer, MDI=metered-dose inhaler, ABG=arterial blood gas, SGL VIEW=single view, PT CONV=patient convenience.
 - Ignore watermarks, barcodes, ghost/bleed-through text, and annotation callouts. A real charge line has a date + code + amount.
+- "quantity"/"units": copy the printed QTY or UNITS column verbatim into the quantity field. This matters most for drugs. HCPCS J-codes are priced PER UNIT of drug (e.g. J0131 is per 10 mg, J1100 is per 1 mg), so a line reading "J0131 ... QTY 100 ... $92.00" is 100 units, and the correct comparison is against 100 × the per-unit rate, NOT one unit. If no quantity column exists, use 1 for ordinary service lines and null when the line is a drug whose unit count you genuinely cannot read.
 
 ## Step 3 — Validate your own extraction
 
@@ -74,6 +75,7 @@ Return a JSON object matching this exact structure:
       "codeType": "CPT" | "ICD" | "Revenue" | "Other",
       "description": "plain English translation — no jargon. If the printed code was zero-padded, mention the real code here (e.g. 'Blood draw (CPT 36415)')",
       "chargedAmount": number,
+      "quantity": number or null,
       "medicareRate": number or null,
       "flags": [
         {

@@ -3,9 +3,10 @@
 // result against expectations.json, so reviewing the engine means reading a scorecard
 // instead of reading PDFs.
 //
-//   1. start the app:   npm run dev            (defaults to port 3111 below)
+//   1. start the app:   npm run dev -- -p 3111  (the port the harness expects)
 //   2. run the harness: npm run test:bills
 //      flags: --dry (list only, no API calls) · --only=<substring> · --port=3000
+//             --scored (skip bills with no entry in expectations.json — saves API spend)
 //
 // Outputs: training material/results/<bill>.json  and  training material/SCORECARD.md
 
@@ -23,6 +24,7 @@ const flag = (name, def) => {
   return hit ? hit.split("=")[1] : def;
 };
 const DRY = args.includes("--dry");
+const SCORED_ONLY = args.includes("--scored");
 const ONLY = flag("only", "");
 const PORT = flag("port", "3111");
 const API = `http://localhost:${PORT}/api/analyze`;
@@ -92,11 +94,22 @@ function score(result, expect = {}) {
         missing.length ? `missing: ${missing.join(", ")}` : "all present");
   }
 
+  // Split by match strength. A "department" match only tells the patient which
+  // hospital department billed them — counting it alongside a real CPT match would
+  // make the verified number look better than the engine actually got.
   const verified = items.filter((i) => i.codeVerified).length;
+  const exact = items.filter((i) => i.matchType === "exact").length;
+  const chargemaster = items.filter((i) => i.matchType === "chargemaster").length;
+  const department = items.filter((i) => i.matchType === "department").length;
+  const benchmarked = items.filter((i) => i.rateSource === "benchmark").length;
   const stats = {
     lineItems: items.length,
     verified,
     verifiedPct: items.length ? Math.round((verified / items.length) * 100) : 0,
+    exact,
+    chargemaster,
+    department,
+    benchmarked,
     flags: items.reduce((n, i) => n + (i.flags?.length ?? 0), 0),
   };
   return { checks, stats };
@@ -104,10 +117,15 @@ function score(result, expect = {}) {
 
 async function main() {
   const all = (await readdir(BILLS_DIR)).filter((f) => f.toLowerCase().endsWith(".pdf"));
-  const files = ONLY ? all.filter((f) => f.includes(ONLY)) : all;
   const expectations = await loadExpectations();
+  let files = ONLY ? all.filter((f) => f.includes(ONLY)) : all;
+  if (SCORED_ONLY) files = files.filter((f) => expectations[f]);
 
-  console.log(`${files.length} bill(s) in ${path.relative(ROOT, BILLS_DIR)}`);
+  const skipped = all.length - files.length;
+  console.log(
+    `${files.length} bill(s) in ${path.relative(ROOT, BILLS_DIR)}` +
+      (skipped ? ` (${skipped} skipped by filter)` : "")
+  );
   if (DRY) {
     files.forEach((f) => {
       const e = expectations[f];
@@ -156,15 +174,18 @@ async function writeScorecard(rows) {
   L.push("");
   L.push(`_Generated ${stamp} by \`npm run test:bills\`. Expectations: \`expectations.json\` · narrative: \`CASES.md\` · open gaps: \`../GAPS.md\`_`);
   L.push("");
-  L.push("| Case | Checks | Line items | Codes verified | Flags |");
-  L.push("|---|---|---|---|---|");
+  L.push("| Case | Checks | Line items | Recognized | of which exact code | Priced vs benchmark | Flags |");
+  L.push("|---|---|---|---|---|---|---|");
   for (const r of rows) {
     if (r.error) {
-      L.push(`| ${r.label} | ⚠️ ERROR | — | — | — |`);
+      L.push(`| ${r.label} | ⚠️ ERROR | — | — | — | — | — |`);
       continue;
     }
     const c = r.total ? `${r.passed}/${r.total}${r.passed === r.total ? " ✅" : " ⚠️"}` : "unscored";
-    L.push(`| ${r.label} | ${c} | ${r.stats.lineItems} | ${r.stats.verified} (${r.stats.verifiedPct}%) | ${r.stats.flags} |`);
+    const s = r.stats;
+    L.push(
+      `| ${r.label} | ${c} | ${s.lineItems} | ${s.verified} (${s.verifiedPct}%) | ${s.exact + s.chargemaster} | ${s.benchmarked} | ${s.flags} |`
+    );
   }
   L.push("");
   L.push("## Detail");
@@ -177,7 +198,12 @@ async function writeScorecard(rows) {
     }
     if (!r.checks.length) L.push("- _No expectations defined — output recorded only._");
     for (const c of r.checks) L.push(`- ${c.pass ? "🟢" : "🔴"} **${c.name}** — ${c.detail}`);
-    L.push(`- ℹ️ ${r.stats.lineItems} line items · ${r.stats.verified} code-verified (${r.stats.verifiedPct}%) · ${r.stats.flags} flags`);
+    const s = r.stats;
+    L.push(
+      `- ℹ️ ${s.lineItems} line items · ${s.verified} recognized (${s.verifiedPct}%)` +
+        ` — ${s.exact} exact code, ${s.chargemaster} via chargemaster, ${s.department} department only`
+    );
+    L.push(`- ℹ️ ${s.benchmarked} line(s) priced against a real Medicare benchmark · ${s.flags} flags`);
   }
   L.push("");
   await writeFile(path.join(TRAINING_DIR, "SCORECARD.md"), L.join("\n"));
