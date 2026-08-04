@@ -69,6 +69,32 @@ export async function POST(req: NextRequest) {
     const raw = content.text.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
     const analysis = JSON.parse(raw);
 
+    // Multi-document packets (gap #3): a single PDF often bundles a hospital bill + an
+    // EOB + a denial letter. Classifying the whole thing by its first page (usually an
+    // EOB) drove the headline total to $0 and suppressed the patient's rights. Derive
+    // the governing figures from the bill documents in code, as a deterministic safety
+    // net that holds even when the model mis-summarizes the packet.
+    const BILL_DOC_TYPES = ["itemized_statement", "ub04_claim", "cms1500_claim", "summary_bill"];
+    if (Array.isArray(analysis.documents) && analysis.documents.length > 0) {
+      const billDocs = analysis.documents.filter(
+        (d: { type?: string }) => d && BILL_DOC_TYPES.includes(d.type ?? "")
+      );
+      const governing = billDocs.reduce(
+        (max: number, d: { totalCharged?: number }) =>
+          typeof d.totalCharged === "number" && d.totalCharged > max ? d.totalCharged : max,
+        0
+      );
+      // If the model left the headline at 0/missing but a bill document shows charges, use it.
+      if ((typeof analysis.totalCharged !== "number" || analysis.totalCharged <= 0) && governing > 0) {
+        analysis.totalCharged = governing;
+      }
+      // A real bill is present → don't let an EOB classification suppress reconciliation
+      // or the No Surprises rights layer downstream.
+      if (billDocs.length > 0 && (analysis.documentType === "eob" || analysis.documentType === "msn")) {
+        analysis.documentType = billDocs[0].type;
+      }
+    }
+
     // Deterministic grounding: Claude decodes each code into plain English, but the
     // authoritative facts (does the code exist, its category, and the real Medicare
     // benchmark) come from our reference DB — so dollar comparisons aren't guesses.

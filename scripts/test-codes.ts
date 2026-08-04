@@ -42,15 +42,16 @@ const cases: Case[] = [
 // Per-unit drug pricing: the benchmark must cover the whole line, not one unit.
 // Getting this wrong turns an ~11x markup into a reported 1,150x.
 type RateCase = { code: string; quantity?: number | null; wantRate: number | undefined; why: string };
+// Rates now come from the real CMS ASP drug pricing file (2026 Q3), scaled by quantity.
 const rateCases: RateCase[] = [
-  { code: "J0131", quantity: 100, wantRate: 8, why: "acetaminophen $0.08/10mg x 100 units" },
-  { code: "J1100", quantity: 8, wantRate: 0.8, why: "dexamethasone $0.10/mg x 8" },
-  { code: "J2405", quantity: 4, wantRate: 1.2, why: "ondansetron $0.30/mg x 4" },
-  { code: "J2250", quantity: 2, wantRate: 0.4, why: "midazolam $0.20/mg x 2" },
-  { code: "J7120", quantity: 1, wantRate: 1.5, why: "one bag of IV fluid" },
+  { code: "J0131", quantity: 100, wantRate: 5, why: "acetaminophen CMS $0.05/10mg x 100 units" },
+  { code: "J1100", quantity: 8, wantRate: 0.68, why: "dexamethasone CMS $0.085/mg x 8" },
+  { code: "J2405", quantity: 4, wantRate: 0.35, why: "ondansetron CMS $0.088/mg x 4" },
+  { code: "J2250", quantity: 2, wantRate: 0.29, why: "midazolam CMS $0.143/mg x 2" },
+  { code: "J7120", quantity: 1, wantRate: 2.31, why: "IV fluid CMS $2.313/1000cc x 1" },
   { code: "J0131", quantity: null, wantRate: undefined, why: "unknown units -> quote NO benchmark" },
   { code: "J0131", wantRate: undefined, why: "missing quantity -> quote NO benchmark" },
-  { code: "73080", quantity: 1, wantRate: 30, why: "non per-unit code is unaffected by quantity" },
+  { code: "73080", quantity: 1, wantRate: 30, why: "imaging: not in CMS, curated rate, unaffected by quantity" },
   { code: "73080", quantity: 3, wantRate: 30, why: "per-procedure rate must NOT be multiplied" },
 ];
 

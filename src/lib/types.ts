@@ -35,11 +35,25 @@ export type DocumentType =
   | "summary_bill"
   | "other";
 
+/**
+ * One document inside a multi-document packet. A single uploaded PDF often staples
+ * together a hospital bill + an insurance EOB + a denial letter; treating the whole
+ * thing as one document (usually the first page, an EOB) is what made the engine
+ * report a $0 total and drop the patient's rights. We now itemize the packet.
+ */
+export interface DocumentInfo {
+  type: DocumentType;
+  label: string;                        // e.g. "Hospital itemized statement", "Cigna EOB"
+  totalCharged?: number | null;         // gross provider charges on THIS document
+  patientResponsibility?: number | null; // what THIS document says the patient owes
+}
+
 export interface BillAnalysis {
   patientName?: string;
   facilityName?: string;
   serviceDate?: string;
-  documentType?: DocumentType;
+  documentType?: DocumentType; // the PRIMARY (most informative bill) document in the packet
+  documents?: DocumentInfo[]; // every document found, when the upload is a multi-doc packet
   coverageWarning?: string;   // set when the analysis is partial (missing pages etc.)
   selfPay?: boolean | null;   // paid without insurance (unlocks the federal dispute)
   billDate?: string;          // statement date, distinct from the service date

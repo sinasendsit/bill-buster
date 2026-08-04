@@ -1,3 +1,5 @@
+import cmsRatesRaw from "./cmsRates.generated.json";
+
 // Deterministic medical-code lookup — the "source of truth" layer.
 //
 // Claude reads the bill and decodes each code into plain English (the LLM's job).
@@ -253,6 +255,37 @@ export function lookupByDescription(description: string): CodeRecord | null {
   return code ? MAP.get(code) ?? null : null;
 }
 
+// ---- CMS fee-schedule rates (real Medicare prices) ------------------------------
+// Generated from the Clinical Lab Fee Schedule + Medicare Part B ASP drug pricing
+// files (see training material/cms-data/). These are real, current figures and
+// override the curated approximations above whenever a code matches — and they add
+// ~2,800 lab/drug codes the curated table never had.
+interface CmsRate {
+  code: string;
+  system: "CPT" | "HCPCS";
+  rate: number;
+  unit: string | null;
+  source: string;
+  desc: string | null;
+}
+const CMS = new Map<string, CmsRate>();
+for (const r of cmsRatesRaw as unknown as CmsRate[]) CMS.set(r.code.toUpperCase(), r);
+
+/** Look up a code in the CMS fee schedules, tolerating labels/zero-padding. */
+function lookupCms(raw: string): CmsRate | null {
+  const n = normalizeCode(raw);
+  if (!n) return null;
+  const tries = [n];
+  if (/^0\d{5}$/.test(n)) tries.push(n.slice(1)); // zero-padded CPT
+  for (const t of tries) {
+    const hit = CMS.get(t);
+    if (hit && typeof hit.rate === "number") return hit;
+  }
+  return null;
+}
+
+export const CMS_RATE_COUNT = CMS.size;
+
 /**
  * Ground a single line item against the reference DB (mutates in place):
  * confirm the code, attach its category, and replace the model's guessed
@@ -299,6 +332,21 @@ export function groundLineItem(item: {
     rec = lookupByDescription(item.description);
     if (rec) matchType = "department";
   }
+  // 4. Not in the curated table, but the CMS fee schedule knows it (~2,800 lab/drug codes).
+  if (!rec && typeof item.code === "string") {
+    const cms = lookupCms(item.code);
+    if (cms) {
+      rec = {
+        code: cms.code,
+        system: cms.system,
+        name: cms.desc ?? `${cms.system} ${cms.code}`,
+        category: cms.source.startsWith("CLFS") ? "Lab" : "Drug",
+        medicareRate: cms.rate,
+        unit: cms.unit ?? undefined,
+      };
+      matchType = "exact";
+    }
+  }
 
   if (!rec || !matchType) {
     item.codeVerified = false;
@@ -315,27 +363,33 @@ export function groundLineItem(item: {
   // specific code inside a department that carries one (e.g. implants, OR time).
   item.codeNote = [rec.note, department?.note].filter(Boolean).join(" ") || undefined;
 
-  if (typeof rec.medicareRate === "number") {
-    if (rec.unit) {
+  // Rate: real CMS fee-schedule prices win over the curated approximations; fall back
+  // to the curated rate when CMS doesn't cover this code (imaging, room & board, etc.).
+  const cmsRate = lookupCms(rec.code);
+  const benchRate = typeof cmsRate?.rate === "number" ? cmsRate.rate : rec.medicareRate;
+  const benchUnit = cmsRate ? cmsRate.unit ?? undefined : rec.unit;
+
+  if (typeof benchRate === "number") {
+    if (benchUnit) {
       // Per-unit pricing (drugs). The charge covers `quantity` units, so comparing it
       // against ONE unit's rate overstates the markup by exactly the quantity —
       // $92 of IV acetaminophen reads as 1,150x instead of ~11x. Without a trustworthy
       // unit count we publish no benchmark at all rather than an alarming wrong one.
       const qty = typeof item.quantity === "number" && item.quantity > 0 ? item.quantity : null;
-      item.medicareUnitRate = rec.medicareRate;
-      item.medicareRateUnit = rec.unit;
+      item.medicareUnitRate = benchRate;
+      item.medicareRateUnit = benchUnit;
       if (qty === null) {
         delete item.medicareRate;
         item.rateSource = undefined;
-        item.codeNote = [item.codeNote, `Priced ${rec.unit}. We could not read how many units were billed, so we are not quoting a Medicare comparison for this line — ask the hospital for the units billed.`]
+        item.codeNote = [item.codeNote, `Priced ${benchUnit}. We could not read how many units were billed, so we are not quoting a Medicare comparison for this line — ask the hospital for the units billed.`]
           .filter(Boolean)
           .join(" ");
       } else {
-        item.medicareRate = Math.round(rec.medicareRate * qty * 100) / 100;
+        item.medicareRate = Math.round(benchRate * qty * 100) / 100;
         item.rateSource = "benchmark";
       }
     } else {
-      item.medicareRate = rec.medicareRate; // authoritative benchmark wins over the guess
+      item.medicareRate = benchRate; // authoritative benchmark wins over the guess
       item.rateSource = "benchmark";
     }
   } else if (typeof item.medicareRate === "number") {
@@ -347,5 +401,6 @@ export function groundLineItem(item: {
 
 export const CODE_DB_SIZE = RECORDS.length;
 export const RATE_BASIS =
-  "Approximate Medicare national benchmark rates, curated for common bill codes. " +
-  "Full CMS fee schedules pending import for exact figures.";
+  "Real Medicare rates from the CMS Clinical Lab Fee Schedule and Part B ASP drug " +
+  "pricing files, backed by a curated table for categories, notes, and codes CMS " +
+  "does not price (imaging, room & board, implants).";
