@@ -7,6 +7,25 @@ import { assessNoSurprises } from "@/lib/noSurprises";
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
 
+// Anthropic's request cap is ~32 MB total; base64 inflates raw bytes by ~4/3, so we
+// gate on the ENCODED size. 30 MB encoded ≈ 22 MB raw — comfortably under the API's
+// hard limit (gap #26: a 26 MB PDF was blowing past it and coming back as a bare 500).
+const MAX_ENCODED_BYTES = 30 * 1024 * 1024; // 30 MB, base64-encoded
+const MAX_RAW_MB = Math.floor((MAX_ENCODED_BYTES * 3) / 4 / (1024 * 1024)); // ~22 MB raw
+
+function fileTooLargeResponse() {
+  return NextResponse.json(
+    {
+      error: "file_too_large",
+      message:
+        `This file is too large to analyze (over ${MAX_RAW_MB} MB). Please split it into fewer pages ` +
+        "or re-export/scan it at a lower resolution, then upload it again.",
+      maxMB: MAX_RAW_MB,
+    },
+    { status: 413 }
+  );
+}
+
 /** Turn an uploaded PDF/image into a Claude content block, or null if unsupported. */
 async function toContentBlock(f: File): Promise<Anthropic.ContentBlockParam | null> {
   const mimeType = f.type;
@@ -54,11 +73,33 @@ export async function POST(req: NextRequest) {
     }
     promptContent.push({ type: "text", text: BILL_ANALYSIS_PROMPT });
 
-    const response = await anthropic.messages.create({
-      model: "claude-opus-4-8",
-      max_tokens: 16000,
-      messages: [{ role: "user", content: promptContent }],
-    });
+    // Guard against the request exceeding Anthropic's size cap (gap #26) before we
+    // ever make the call — check the total ENCODED size of every document/image block.
+    const encodedBytes = promptContent.reduce((sum, block) => {
+      if ((block.type === "document" || block.type === "image") && block.source?.type === "base64") {
+        return sum + block.source.data.length;
+      }
+      return sum;
+    }, 0);
+    if (encodedBytes > MAX_ENCODED_BYTES) {
+      return fileTooLargeResponse();
+    }
+
+    let response;
+    try {
+      response = await anthropic.messages.create({
+        model: "claude-opus-4-8",
+        max_tokens: 16000,
+        messages: [{ role: "user", content: promptContent }],
+      });
+    } catch (apiErr) {
+      const status =
+        apiErr instanceof Anthropic.APIError ? apiErr.status : undefined;
+      if (status === 413) {
+        return fileTooLargeResponse();
+      }
+      throw apiErr;
+    }
 
     const content = response.content[0];
     if (content.type !== "text") {

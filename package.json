@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "test:bills": "node scripts/run-training.mjs",
+    "demo:refresh": "node scripts/refresh-demo.mjs",
     "test:codes": "tsx scripts/test-codes.ts"
   },
   "dependencies": {

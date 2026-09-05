@@ -266,6 +266,7 @@ interface CmsRate {
   rate: number;
   unit: string | null;
   source: string;
+  category: string; // "Lab" | "Drug" | "Procedure" | "Facility fee" — set by the parser per schedule
   desc: string | null;
 }
 const CMS = new Map<string, CmsRate>();
@@ -340,7 +341,7 @@ export function groundLineItem(item: {
         code: cms.code,
         system: cms.system,
         name: cms.desc ?? `${cms.system} ${cms.code}`,
-        category: cms.source.startsWith("CLFS") ? "Lab" : "Drug",
+        category: cms.category,
         medicareRate: cms.rate,
         unit: cms.unit ?? undefined,
       };

@@ -51,8 +51,10 @@ const rateCases: RateCase[] = [
   { code: "J7120", quantity: 1, wantRate: 2.31, why: "IV fluid CMS $2.313/1000cc x 1" },
   { code: "J0131", quantity: null, wantRate: undefined, why: "unknown units -> quote NO benchmark" },
   { code: "J0131", wantRate: undefined, why: "missing quantity -> quote NO benchmark" },
-  { code: "73080", quantity: 1, wantRate: 30, why: "imaging: not in CMS, curated rate, unaffected by quantity" },
-  { code: "73080", quantity: 3, wantRate: 30, why: "per-procedure rate must NOT be multiplied" },
+  // 73080 is now priced by the real CMS PFS file (added below); this per-procedure
+  // rate must not scale with quantity regardless of which source supplies it.
+  { code: "73080", quantity: 1, wantRate: 33.07, why: "imaging: CMS PFS rate, unaffected by quantity" },
+  { code: "73080", quantity: 3, wantRate: 33.07, why: "per-procedure rate must NOT be multiplied" },
 ];
 
 let pass = 0;
@@ -81,4 +83,36 @@ for (const c of rateCases) {
 }
 console.log(`\n${ratePass}/${rateCases.length} per-unit pricing cases passing`);
 
-if (pass !== cases.length || ratePass !== rateCases.length) process.exit(1);
+// Codes newly covered by the CMS Physician Fee Schedule (PFS) and OPPS Addendum B
+// additions (imaging, ER/office visits, hospital outpatient facility fees). These
+// real government rates move with every quarterly CMS refresh, so we assert a
+// plausible range rather than hardcoding exact cents.
+type RangeCase = { code: string; min: number; max: number; why: string };
+const rangeCases: RangeCase[] = [
+  { code: "99283", min: 40, max: 300, why: "ER visit level 3 — CMS PFS national non-facility payment" },
+  { code: "99284", min: 60, max: 450, why: "ER visit level 4 — CMS PFS national non-facility payment" },
+  { code: "99285", min: 90, max: 650, why: "ER visit level 5 — CMS PFS national non-facility payment" },
+  { code: "71045", min: 10, max: 60, why: "chest X-ray, 1 view — CMS PFS" },
+  { code: "71046", min: 15, max: 90, why: "chest X-ray, 2 views — CMS PFS" },
+  { code: "70450", min: 60, max: 200, why: "CT head, no contrast — CMS PFS" },
+  { code: "73080", min: 15, max: 70, why: "elbow X-ray, 3+ views — CMS PFS" },
+  { code: "72148", min: 100, max: 350, why: "MRI lumbar spine, no contrast — CMS PFS" },
+  { code: "36415", min: 1, max: 20, why: "venipuncture — CLFS lab code (unchanged by this refresh)" },
+  { code: "G0463", min: 50, max: 300, why: "OPPS-only: hospital outpatient clinic visit facility fee" },
+];
+
+let rangePass = 0;
+for (const c of rangeCases) {
+  const item: Record<string, unknown> = { code: c.code };
+  groundLineItem(item as never);
+  const got = item.medicareRate as number | undefined;
+  const ok = typeof got === "number" && got >= c.min && got <= c.max;
+  if (ok) rangePass++;
+  console.log(
+    `${ok ? "  ok" : "FAIL"}  ${c.code.padEnd(8)} rate=${String(got)}`.padEnd(34) +
+      `want [${c.min}, ${c.max}]   ${c.why}`
+  );
+}
+console.log(`\n${rangePass}/${rangeCases.length} plausible-range CMS rate cases passing`);
+
+if (pass !== cases.length || ratePass !== rateCases.length || rangePass !== rangeCases.length) process.exit(1);
