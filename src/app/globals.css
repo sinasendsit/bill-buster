@@ -1,26 +1,62 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --shadow-nav-value: 0px 0px 48px 0px rgba(0, 0, 0, 0.1);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
+@theme {
+  /* Colors — BillBuster visual spec (see MVP/DESIGN.md). Monochrome + violet + mint only. */
+  --color-signal-violet: #5f79ff;
+  --color-mint-pulse: #01fe93;
+  --color-pure-white: #ffffff;
+  --color-ink-black: #000000;
+  --color-fog-gray: #f5f5f5;
+  --color-mist-gray: #a6a6a6;
+  --color-ash-gray: #4d4d4d;
+  --color-smoke-gray: #9c9c9c;
+  --color-slate-gray: #707070;
+  --color-tint-wash: #d9defc;
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  /* Type */
+  --font-ui: var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-display: var(--font-cormorant), "Playfair Display", "EB Garamond", Georgia, serif;
+
+  --text-caption: 12px;
+  --text-caption--line-height: 1.2;
+  --text-body: 15px;
+  --text-body--line-height: 1.4;
+  --text-subheading: 20px;
+  --text-subheading--line-height: 1.25;
+  --text-subheading--letter-spacing: -0.017em;
+  --text-heading-sm: 24px;
+  --text-heading-sm--line-height: 1.2;
+  --text-heading-sm--letter-spacing: -0.017em;
+  --text-heading: 30px;
+  --text-heading--line-height: 1.18;
+  --text-heading-lg: 40px;
+  --text-heading-lg--line-height: 1.1;
+  --text-display: 72px;
+  --text-display--line-height: 0.9;
+  --text-display--letter-spacing: -0.02em;
+
+  /* Shape */
+  --radius-inputs: 12px;
+  --radius-cards: 16px;
+  --radius-nav: 16px;
+  --radius-images: 16px;
+  --radius-pill: 100px;
+
+  /* Shadow — reserved for the floating nav only */
+  --shadow-nav: 0px 0px 48px 0px rgba(0, 0, 0, 0.1);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-pure-white);
+  color: var(--color-ink-black);
+  font-family: var(--font-ui);
+  font-weight: 400;
+}
+
+::selection {
+  background: var(--color-tint-wash);
 }

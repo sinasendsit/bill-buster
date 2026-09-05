@@ -3,6 +3,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { anthropic, BILL_ANALYSIS_PROMPT } from "@/lib/claude";
 import { groundLineItem } from "@/lib/codeDatabase";
 import { assessNoSurprises } from "@/lib/noSurprises";
+import { decodeAll } from "@/lib/denialCodes";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"] as const;
 type ImageType = (typeof IMAGE_TYPES)[number];
@@ -85,13 +86,18 @@ export async function POST(req: NextRequest) {
       return fileTooLargeResponse();
     }
 
+    // Long itemized bills (79+ lines) overran a 16K output cap once the prompt started
+    // asking for adjustment codes too, truncating the JSON mid-string (gap #17).
+    // Stream with a larger cap; the SDK requires streaming for big max_tokens values.
     let response;
     try {
-      response = await anthropic.messages.create({
-        model: "claude-opus-4-8",
-        max_tokens: 16000,
-        messages: [{ role: "user", content: promptContent }],
-      });
+      response = await anthropic.messages
+        .stream({
+          model: "claude-opus-4-8",
+          max_tokens: 32000,
+          messages: [{ role: "user", content: promptContent }],
+        })
+        .finalMessage();
     } catch (apiErr) {
       const status =
         apiErr instanceof Anthropic.APIError ? apiErr.status : undefined;
@@ -104,6 +110,17 @@ export async function POST(req: NextRequest) {
     const content = response.content[0];
     if (content.type !== "text") {
       throw new Error("Unexpected response type from Claude");
+    }
+    if (response.stop_reason === "max_tokens") {
+      // Honest failure beats a half-parsed bill: tell the user rather than 500.
+      return NextResponse.json(
+        {
+          error: "bill_too_long",
+          message:
+            "This bill has more line items than we can read in one pass. Try uploading fewer pages at a time (for example, split it in half).",
+        },
+        { status: 422 }
+      );
     }
 
     // Claude sometimes wraps JSON in markdown code fences — strip them
@@ -141,6 +158,14 @@ export async function POST(req: NextRequest) {
     // benchmark) come from our reference DB — so dollar comparisons aren't guesses.
     if (Array.isArray(analysis.lineItems)) {
       for (const item of analysis.lineItems) groundLineItem(item);
+    }
+
+    // Denial/remark codes (gap #7): Claude reports the raw codes printed on an EOB/MSN
+    // ("adjustmentCodes"); a deterministic dictionary decides what each one means and
+    // whether it's a dispute opportunity — never the model. Omit when there's nothing.
+    if (Array.isArray(analysis.adjustmentCodes) && analysis.adjustmentCodes.length > 0) {
+      const denials = decodeAll(analysis.adjustmentCodes);
+      if (denials.length > 0) analysis.denials = denials;
     }
 
     // Cross-check the printed grand total against the sum of the line items —

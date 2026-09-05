@@ -64,6 +64,16 @@ These three facts drive the patient's legal rights, so report them literally and
 - "billDate": the statement or bill date printed on the document (NOT the date of service). null if absent.
 - "estimateTotal": if a SECOND document is attached, it is the patient's GOOD FAITH ESTIMATE — a written cost estimate given before treatment. Extract its total estimated amount here. If only one document was provided, set this to null. Never infer an estimate from the bill itself.
 
+## Step 6 — Denial and remark codes (EOB, MSN, or denial letter documents only)
+
+EOBs, MSNs, and denial letters print short codes explaining why something wasn't paid (e.g. "CO-45", "45", "N130", "D3", "PR-1"). These codes are exactly the kind of thing a patient cannot decode on their own — report the raw facts and nothing more; a separate deterministic step (not you) decides what each code means and whether it's worth disputing.
+
+- "adjustmentCodes": list EVERY remark/reason/adjustment code printed anywhere on the document, one entry per code (a single line can carry more than one code — list each separately). For each: the "code" exactly as printed (keep hyphens/prefixes, e.g. "CO-45"), the "lineItemIndex" (the index into your "lineItems" array, 0-based) when the code is attached to a specific service line, and — only if the EOB itself prints a code key/legend/glossary defining that code — the exact printed "printedDefinition" text. Do not paraphrase or explain the code yourself; if no legend is printed, leave printedDefinition null.
+- "appealDeadlineText": the literal sentence(s) stating how long the patient has to appeal (e.g. "You have 180 days from the date of this notice to file an appeal"), copied verbatim. null if not printed.
+- "appealAddressOrUrl": the mailing address, fax number, phone number, or URL printed for filing an appeal. null if not printed.
+
+These three fields only apply to EOB/MSN/denial-letter documents; use null/empty array when the document is a plain itemized bill with no adjustment codes.
+
 ## Output
 
 Return a JSON object matching this exact structure:
@@ -104,7 +114,16 @@ Return a JSON object matching this exact structure:
     }
   ],
   "summary": "2-3 sentences in plain English summarizing the bill and the biggest concerns",
-  "topIssues": ["3-5 most important problems or questions the patient should raise, each with the dollar amount at stake where possible"]
+  "topIssues": ["3-5 most important problems or questions the patient should raise, each with the dollar amount at stake where possible"],
+  "adjustmentCodes": [
+    {
+      "code": "the denial/remark/adjustment code exactly as printed, e.g. 'CO-45', '45', 'N130', 'D3'",
+      "lineItemIndex": "number or null — 0-based index into lineItems, when this code is attached to a specific service line",
+      "printedDefinition": "string or null — ONLY the EOB's own printed definition for this code, verbatim, if it prints a code key/legend"
+    }
+  ],
+  "appealDeadlineText": "string or null — the literal sentence(s) about the appeal deadline, quoted verbatim from the document",
+  "appealAddressOrUrl": "string or null — the address, phone, fax, or URL printed for filing an appeal"
 }
 
 Every flag message must give the patient something to DO, not just something to worry about. Quote printed values verbatim (typos included) rather than silently correcting them. Be precise, be plain — patients deserve to understand every line.

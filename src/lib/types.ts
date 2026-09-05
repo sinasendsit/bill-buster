@@ -1,5 +1,6 @@
 import type { NoSurprisesInfo } from "./noSurprises";
 import type { MatchType } from "./codeDatabase";
+import type { Denial } from "./denialCodes";
 
 export interface LineItem {
   code: string;
@@ -63,4 +64,7 @@ export interface BillAnalysis {
   lineItems: LineItem[];
   summary: string;            // 2-3 sentence plain English summary
   topIssues: string[];        // the 3-5 biggest problems found
+  denials?: Denial[];         // decoded EOB/MSN denial & remark codes, computed in code (gap #7)
+  appealDeadlineText?: string | null; // literal sentence from the document about the appeal window, e.g. "You have 180 days..."
+  appealAddressOrUrl?: string | null; // where to send/file the appeal, if printed
 }

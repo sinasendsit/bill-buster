@@ -5,7 +5,8 @@
 //
 //   1. start the app:   npm run dev -- -p 3111  (the port the harness expects)
 //   2. run the harness: npm run test:bills
-//      flags: --dry (list only, no API calls) · --only=<substring> · --port=3000
+//      flags: --dry (list only, no API calls) · --rescore (re-score saved results, no API calls)
+//             --scored (only bills with expectations) · --only=<substring> · --port=3000
 //             --scored (skip bills with no entry in expectations.json — saves API spend)
 //
 // Outputs: training material/results/<bill>.json  and  training material/SCORECARD.md
@@ -24,6 +25,7 @@ const flag = (name, def) => {
   return hit ? hit.split("=")[1] : def;
 };
 const DRY = args.includes("--dry");
+const RESCORE = args.includes("--rescore"); // rebuild SCORECARD.md from saved results/*.json, no API calls
 const SCORED_ONLY = args.includes("--scored");
 const ONLY = flag("only", "");
 const PORT = flag("port", "3111");
@@ -142,11 +144,15 @@ async function main() {
     const label = expectations[file]?.label ?? file;
     process.stdout.write(`→ ${label} … `);
     try {
-      const result = await analyze(file);
-      await writeFile(
-        path.join(OUT_DIR, file.replace(/\.pdf$/i, ".json")),
-        JSON.stringify(result, null, 2)
-      );
+      const outPath = path.join(OUT_DIR, file.replace(/\.pdf$/i, ".json"));
+      let result;
+      if (RESCORE) {
+        // Zero API calls: re-score the last saved result for this bill.
+        result = JSON.parse(await readFile(outPath, "utf8"));
+      } else {
+        result = await analyze(file);
+        await writeFile(outPath, JSON.stringify(result, null, 2));
+      }
       const { checks, stats } = score(result, expectations[file]?.expect);
       const passed = checks.filter((c) => c.pass).length;
       rows.push({ file, label, checks, stats, passed, total: checks.length });

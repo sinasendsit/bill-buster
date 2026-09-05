@@ -1,4 +1,5 @@
 import { groundLineItem } from "../src/lib/codeDatabase";
+import { decodeDenialCode, decodeAll } from "../src/lib/denialCodes";
 
 type Case = { code?: string; description?: string; want: string };
 // Codes as they actually came out of the engine on the three real bills.
@@ -115,4 +116,79 @@ for (const c of rangeCases) {
 }
 console.log(`\n${rangePass}/${rangeCases.length} plausible-range CMS rate cases passing`);
 
-if (pass !== cases.length || ratePass !== rateCases.length || rangePass !== rangeCases.length) process.exit(1);
+// Denial/remark code dictionary (gap #7) — D3 and A1 were the whole Jones story.
+// decodeDenialCode must normalize CARC/RARC/group variants, use the EOB's own printed
+// definition when we have one, degrade unknown/payer codes to a safe generic message,
+// and never throw on garbage input.
+type DenialCase = {
+  code: string;
+  printedDefinition?: string;
+  wantSystem: "CARC" | "RARC" | "group" | "payer";
+  wantActionable?: boolean;
+  wantMeaningIncludes?: string;
+  why: string;
+};
+const denialCases: DenialCase[] = [
+  { code: "CO-45", wantSystem: "CARC", wantActionable: true, wantMeaningIncludes: "allow", why: "group+CARC hyphenated -> fee schedule/balance billing, actionable" },
+  { code: "CO45", wantSystem: "CARC", wantActionable: true, why: "group+CARC no separator normalizes the same as CO-45" },
+  { code: "45", wantSystem: "CARC", wantActionable: true, why: "bare CARC reason code alone" },
+  { code: "197", wantSystem: "CARC", wantActionable: true, wantMeaningIncludes: "authorization", why: "prior auth absent -> actionable" },
+  { code: "N130", wantSystem: "RARC", why: "N-code remark -> RARC" },
+  { code: "PR-1", wantSystem: "CARC", wantActionable: false, wantMeaningIncludes: "deductible", why: "PR group + CARC 1 -> deductible, not actionable" },
+  { code: "D3", printedDefinition: "Service denied - see attached documentation", wantSystem: "payer", wantMeaningIncludes: "see attached documentation", why: "payer code WITH printed definition uses that exact text" },
+  { code: "D3", wantSystem: "payer", wantMeaningIncludes: "code key printed on your EOB", why: "payer code with NO printed definition falls back to the generic message" },
+  { code: "A1", wantSystem: "payer", why: "the other Jones code — unknown payer shorthand, never a throw" },
+  { code: "n130", wantSystem: "RARC", why: "lowercase input is normalized" },
+  { code: "MA130", wantSystem: "RARC", wantActionable: true, why: "two-letter MA-series remark code" },
+  { code: "xyz-not-a-real-code-999999", wantSystem: "payer", why: "garbage input never throws, degrades to payer-generic" },
+  { code: "", wantSystem: "payer", why: "empty string must not throw" },
+];
+
+let denialPass = 0;
+for (const c of denialCases) {
+  let entry: ReturnType<typeof decodeDenialCode>;
+  try {
+    entry = decodeDenialCode(c.code, c.printedDefinition);
+  } catch {
+    entry = null;
+  }
+  const systemOk = c.code === "" ? entry === null : entry?.system === c.wantSystem;
+  const actionableOk =
+    c.wantActionable === undefined ? true : Boolean(entry?.actionable) === c.wantActionable;
+  const meaningOk =
+    c.wantMeaningIncludes === undefined
+      ? true
+      : (entry?.meaning ?? "").toLowerCase().includes(c.wantMeaningIncludes.toLowerCase());
+  const ok = systemOk && actionableOk && meaningOk;
+  if (ok) denialPass++;
+  console.log(
+    `${ok ? "  ok" : "FAIL"}  ${c.code.padEnd(28)} system=${String(entry?.system ?? "null").padEnd(8)}` +
+      ` actionable=${String(Boolean(entry?.actionable)).padEnd(6)} ${c.why}`
+  );
+}
+console.log(`\n${denialPass}/${denialCases.length} denial-code lookup cases passing`);
+
+// decodeAll: end-to-end shape — line-item index passthrough, empty/garbage arrays.
+const decoded = decodeAll([
+  { code: "CO-45", lineItemIndex: 2 },
+  { code: "N130" },
+  { code: "bogus-code" },
+]);
+const decodeAllOk =
+  decoded.length === 3 &&
+  decoded[0].lineItemIndex === 2 &&
+  decoded[0].system === "CARC" &&
+  decoded[1].system === "RARC" &&
+  decoded[1].lineItemIndex === undefined &&
+  decoded[2].system === "payer";
+console.log(`${decodeAllOk ? "  ok" : "FAIL"}  decodeAll() end-to-end shape (lineItemIndex passthrough, mixed systems)`);
+console.log(`${decodeAllOk ? 1 : 0}/1 decodeAll shape case passing`);
+
+if (
+  pass !== cases.length ||
+  ratePass !== rateCases.length ||
+  rangePass !== rangeCases.length ||
+  denialPass !== denialCases.length ||
+  !decodeAllOk
+)
+  process.exit(1);
